@@ -5,10 +5,11 @@ from src.agents.Agent import BaseAgent
 from src.utils.helper import log_message
 import src.agents.agent_helper as helper
 
-class Agent_GraphMedNCA(BaseAgent):
+
+class Agent_MedNCA(BaseAgent):
     def __init__(self, model, log_enabled=True, config=None):
         # The BaseAgent constructor only takes model as an argument
-        super(Agent_GraphMedNCA, self).__init__(model)
+        super(Agent_MedNCA, self).__init__(model)
         self.experiment = None  # Will be set later by Experiment class
         self.log_enabled = log_enabled
         self.projectConfig = config  # Store the config for later use
@@ -119,19 +120,13 @@ class Agent_GraphMedNCA(BaseAgent):
         
     def train(self, data_loader, loss_function):
         """
-        Training loop adjusted for Graph-based Med-NCA
+        Training loop adjusted for BasicNCA
         """
         if self.experiment is None:
             raise ValueError("Experiment not set. Call set_exp() before training.")
             
         self.model.train()
         dataset = data_loader.dataset
-
-        # check if dataset is empty
-        if len(dataset) == 0:
-            module = f"{__name__}" if self.log_enabled else ""
-            log_message("Dataset is empty. Cannot start training.", "ERROR", module, self.log_enabled, self.projectConfig)
-            return
         
         # Get configuration from experiment
         n_epoch = int(self.experiment.get_from_config('n_epoch'))
@@ -213,11 +208,12 @@ class Agent_GraphMedNCA(BaseAgent):
             self.process_epoch(epoch, avg_loss)
 
         save_path = os.path.join(self.experiment.get_from_config('model_path'), 'checkpoints', f'final_model.pth')
+        dir_path = os.path.join(self.experiment.get_from_config('model_path'), 'checkpoints')
+        os.makedirs(dir_path, exist_ok=True)
         torch.save(self.model.state_dict(), save_path)
         log_message(f"Final Model saved at epoch {epoch}", "SUCCESS", module, self.log_enabled, self.projectConfig)
             
         log_message(" Training completed! ", "SUCCESS", module, self.log_enabled, self.projectConfig)
-
 
     def dice_coefficient(self, pred, target):
         """Calculate Dice coefficient for binary segmentation"""
@@ -235,11 +231,11 @@ class Agent_GraphMedNCA(BaseAgent):
         dice = (2.0 * intersection + smooth) / (union + smooth)
         
         return dice.item()
-    
+
     def evaluate_imsave(self, output_dir=None, **kwargs):
         return helper.evaluate_imsave(self, output_dir=output_dir, **kwargs)
 
-    def getAverageDiceScore_withimsave(self, output_dir=None, saveGraphs=True):
+    def _getAverageDiceScore_withimsave(self, output_dir=None):
         """
         Evaluate model on test set using Dice score and save segmentation maps
         
@@ -263,42 +259,26 @@ class Agent_GraphMedNCA(BaseAgent):
             
         # Set model to evaluation mode
         self.model.eval()
-
-        # Log the model's device information
-        device_str = str(self.model.device)
-        log_message(f"Model is using device: {device_str}", "INFO", module, self.log_enabled, self.projectConfig)
         
         # Get the dataset and test indices
         try:
-            if self.experiment.test_dataset is None:
-                dataset = self.experiment.dataset
-                
-                # Handle different implementations of DataSplit
-                if hasattr(self.experiment.data_split, 'get_test_indices'):
-                    test_indices = self.experiment.data_split.get_test_indices()
-                elif hasattr(self.experiment.data_split, 'test'):
-                    # If there's a 'test' attribute that contains indices
-                    test_indices = self.experiment.data_split.test
-                else:
-                    # Fallback: try to access the test dictionary directly
-                    try:
-                        # Assuming the data_split object has a dictionary structure with 'test' key
-                        test_indices = list(range(len(dataset)))[-int(len(dataset) * 0.3):]  # Use last 30% as test by default
-                        log_message("Using fallback test indices (last 30% of dataset)", "WARNING", module, self.log_enabled, self.projectConfig)
-                    except Exception as inner_e:
-                        log_message(f"Could not determine test indices: {str(inner_e)}", "ERROR", module, self.log_enabled, self.projectConfig)
-                        test_indices = []
+            dataset = self.experiment.dataset
             
+            # Handle different implementations of DataSplit
+            if hasattr(self.experiment.data_split, 'get_test_indices'):
+                test_indices = self.experiment.data_split.get_test_indices()
+            elif hasattr(self.experiment.data_split, 'test'):
+                # If there's a 'test' attribute that contains indices
+                test_indices = self.experiment.data_split.test
             else:
-                # Use the test dataset directly
-                dataset = self.experiment.test_dataset
-                if hasattr(self.experiment.data_split, 'get_test_indices'):
-                    test_indices = self.experiment.data_split.get_test_indices()
-                elif hasattr(self.experiment.data_split, 'test'):
-                    test_indices = self.experiment.data_split.test
-                else:
-                    test_indices = list(range(len(dataset)))
-                    log_message("Using all indices from test dataset", "INFO", module, self.log_enabled, self.projectConfig)
+                # Fallback: try to access the test dictionary directly
+                try:
+                    # Assuming the data_split object has a dictionary structure with 'test' key
+                    test_indices = list(range(len(dataset)))[-int(len(dataset) * 0.3):]  # Use last 30% as test by default
+                    log_message("Using fallback test indices (last 30% of dataset)", "WARNING", module, self.log_enabled, self.projectConfig)
+                except Exception as inner_e:
+                    log_message(f"Could not determine test indices: {str(inner_e)}", "ERROR", module, self.log_enabled, self.projectConfig)
+                    test_indices = []
             
             if not test_indices:
                 log_message("No test data available for evaluation", "WARNING", module, self.log_enabled, self.projectConfig)
@@ -353,16 +333,11 @@ class Agent_GraphMedNCA(BaseAgent):
                     img = img.to(self.model.device)
                     label = label.to(self.model.device)
                     
-                    if saveGraphs:
-                        # Get prediction WITH graph visualization data
-                        prediction, graph_data = self.model(img, steps=steps, return_graph=True)
-                        img_tensor, edge_index = graph_data
+                    # Get prediction (BasicNCA doesn't have graph visualization)
+                    prediction = self.model(img, steps=steps)
                     
-                    else:
-                        # Get prediction WITHOUT graph visualization data
-                        prediction = self.model(img, steps=steps)
-                        img_tensor, edge_index = None, None
-                                            
+                    # Apply sigmoid for binary segmentation (already done in forward)
+                    
                     # Threshold predictions at 0.5 for binary segmentation
                     prediction_binary = (prediction > 0.5).float()
                     
@@ -428,12 +403,11 @@ class Agent_GraphMedNCA(BaseAgent):
                             colimg = colimg / 255.0
                         
                         
-                        # Create matplotlib figure with 2x2 grid instead of 1x3
-                        fig = plt.figure(figsize=(15, 12))
-                        gs = GridSpec(2, 2, figure=fig)
+                        # Create matplotlib figure with 1x3 grid (original, prediction, ground truth)
+                        fig = plt.figure(figsize=(15, 5))
                         
-                        # Original image - top left
-                        ax1 = fig.add_subplot(gs[0, 0])
+                        # Original image
+                        ax1 = fig.add_subplot(1, 3, 1)
                         if len(colimg.shape) == 3:  # Color image
                             ax1.imshow(colimg)
                         else:  # Grayscale
@@ -441,34 +415,17 @@ class Agent_GraphMedNCA(BaseAgent):
                         ax1.set_title("Original")
                         ax1.axis('off')
                         
-                        # Prediction - top right
-                        ax2 = fig.add_subplot(gs[0, 1])
+                        # Prediction
+                        ax2 = fig.add_subplot(1, 3, 2)
                         ax2.imshow(pred_mask, cmap='gray')
                         ax2.set_title("Prediction")
                         ax2.axis('off')
                         
-                        # Ground truth - bottom left
-                        ax3 = fig.add_subplot(gs[1, 0])
+                        # Ground truth
+                        ax3 = fig.add_subplot(1, 3, 3)
                         ax3.imshow(true_mask, cmap='gray')
                         ax3.set_title("Ground Truth")
                         ax3.axis('off')
-                        
-                        # Graph visualization - bottom right
-                        ax4 = fig.add_subplot(gs[1, 1])
-                        if edge_index is not None:
-                            from src.models.GraphMedNCA import visualize_graph
-                            # Draw graph on the subplot
-                            img_tensor_cpu = img_tensor.cpu()
-                            # Create smaller figure for graph visualization
-                            graph_fig = visualize_graph(img_tensor_cpu, edge_index)
-                            # Convert graph_fig to image and display on ax4
-                            ax4.imshow(self._fig2img(graph_fig))
-                            plt.close(graph_fig)  # Close the temporary figure
-                        else:
-                            ax4.text(0.5, 0.5, "Graph visualization not available", 
-                                    horizontalalignment='center', verticalalignment='center')
-                        ax4.set_title("Graph Connections")
-                        ax4.axis('off')
                         
                         # Add Dice score as text
                         plt.figtext(0.5, 0.01, f"Dice Score: {dice.item():.4f}", ha="center", fontsize=12,
@@ -497,25 +454,6 @@ class Agent_GraphMedNCA(BaseAgent):
             import traceback
             traceback.print_exc()
             return 0.0
-
-    def _fig2img(self, fig):
-        """Convert a Matplotlib figure to a numpy array"""
-        import numpy as np
-        import io
-        from PIL import Image
-        
-        # Save figure to a PNG in memory
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight')
-        buf.seek(0)
-        
-        # Load PNG into a numpy array via PIL
-        img = np.array(Image.open(buf))
-        
-        # Close the buffer
-        buf.close()
-        
-        return img
     
     def getAverageDiceScore(self):
         """
@@ -745,4 +683,3 @@ class Agent_GraphMedNCA(BaseAgent):
                     continue
                     
         log_message(f"Testing completed. Saved masks to {output_dir}", "SUCCESS", module, self.log_enabled, self.projectConfig)
-

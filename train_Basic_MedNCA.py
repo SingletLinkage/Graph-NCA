@@ -5,13 +5,13 @@ import os
 import shutil
 import argparse
 from colorama import Fore, Back, Style, init
-from src.models.GraphMedNCA import GraphMedNCA
+from src.models.BackboneNCAB1 import BasicNCA
 # Import the patched dataset from the new file
 
 from src.datasets.Dataset_JPG import Dataset_JPG_Patch
 from src.utils.Experiment import Experiment
 from src.losses.LossFunctions import DiceBCELoss
-from src.agents.Agent_GraphMedNCA import Agent_GraphMedNCA
+from src.agents.Agent_MedNCA import Agent_MedNCA
 from src.utils.helper import log_message
 
 # Initialize colorama
@@ -66,7 +66,7 @@ config = [{
     # Training config
     'save_interval': 5,
     'evaluate_interval': 1,
-    'n_epoch': 1,  # 10,   # Reduced to test the setup first
+    'n_epoch': 2,  # 10,   # Reduced to test the setup first
     'batch_size': 64,  # Reduced to avoid memory issues during debugging
 
     # Data
@@ -184,23 +184,22 @@ def main(log_enabled=True):
         
         # Create the experiment first to set up the dataset
         log_message("Initializing model...", "INFO", module, log_enabled, config=config)
-        nca = GraphMedNCA(
-            size=config[0]['input_size'][0],
+        nca = BasicNCA(
             hidden_channels=config[0]['hidden_channels'],
             n_channels=config[0]['input_channels'], 
             fire_rate=config[0]['fire_rate'],
             device=device,
             log_enabled=log_enabled
         ).to(device)
-        log_message("GraphMedNCA Model initialized successfully!", "SUCCESS", module, log_enabled, config=config)
+        log_message("BasicNCA Model initialized successfully!", "SUCCESS", module, log_enabled, config=config)
         
-        agent = Agent_GraphMedNCA(nca, log_enabled=log_enabled, config=config)
-        log_message("Agent_GraphMedNCA initialized successfully!", "SUCCESS", module, log_enabled, config=config)
+        agent = Agent_MedNCA(nca, log_enabled=log_enabled, config=config)
+        log_message("Agent_MedNCA initialized successfully!", "SUCCESS", module, log_enabled, config=config)
         exp = Experiment(config, dataset, nca, agent, log_enabled=log_enabled, test_dataset=test_dataset)
         log_message("Experiment initialized successfully!", "SUCCESS", module, log_enabled, config=config)
         exp.set_model_state('train')
         dataset.set_experiment(exp)  # This should now initialize the dataset properly
-        test_dataset.set_experiment(exp, isTest=True)  # Set up test dataset as well
+        test_dataset.set_experiment(exp)  # Set up test dataset as well
         
         # Now we can check the dataset info
         log_message(f"Dataset size: {len(dataset)}", "INFO", module, log_enabled, config=config)

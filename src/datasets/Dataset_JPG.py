@@ -12,7 +12,7 @@ class Dataset_JPG_Patch(Dataset_Base):
     """
     A patched version of Dataset_JPG that properly resizes images and handles different naming patterns
     """
-    def __init__(self, resize=True, log_enabled=True, config=None):
+    def __init__(self, resize=True, log_enabled=True, config=None, _test=False, percentage=1.0):
         super(Dataset_JPG_Patch, self).__init__()
         self.resize = resize
         self.log_enabled = log_enabled
@@ -26,13 +26,16 @@ class Dataset_JPG_Patch(Dataset_Base):
         self.labels = []
         self.input_size = (64, 64)  # Default size
         self.projectConfig = config  # Store the project config for logging
+        self.isTestDataset = _test  # Flag for test dataset
+        self.use_percentage = percentage  # Percentage of data to use, default is 1.0 (100%)
         
         module = f"{__name__}:init" if log_enabled else ""
         log_message(f"Dataset_JPG_Patch initialized with resize={resize}", "INFO", module, log_enabled, self.projectConfig)
     
-    def set_experiment(self, experiment):
+    def set_experiment(self, experiment, isTest=False):
         """Set the experiment object and initialize dataset"""
         self.experiment = experiment
+        self.isTestDataset = isTest
         
         # Get logging preference from experiment config if available
         if experiment.get_from_config('verbose_logging') is not None:
@@ -48,9 +51,13 @@ class Dataset_JPG_Patch(Dataset_Base):
             module = f"{__name__}:setup" if self.log_enabled else ""
             log_message("Warning: Dataset_JPG_Patch has no experiment set", "WARNING", module, self.log_enabled, self.projectConfig)
             return
-            
-        self.img_path = self.experiment.get_from_config('img_path')
-        self.label_path = self.experiment.get_from_config('label_path')
+        
+        if self.isTestDataset:
+            self.img_path = self.experiment.get_from_config('test_img_path')
+            self.label_path = self.experiment.get_from_config('test_label_path')
+        else:
+            self.img_path = self.experiment.get_from_config('img_path')
+            self.label_path = self.experiment.get_from_config('label_path')
         
         # Get input size from config
         self.input_size = self.experiment.get_from_config('input_size')
@@ -67,14 +74,14 @@ class Dataset_JPG_Patch(Dataset_Base):
         # Get all image files from the directory
         if os.path.exists(self.img_path):
             self.images = [f for f in os.listdir(self.img_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-            log_message(f"First few images: {self.images[:5] if self.images else 'None'}", "INFO", module, self.log_enabled, self.projectConfig)
+            # log_message(f"First few images: {self.images[:5] if self.images else 'None'}", "INFO", module, self.log_enabled, self.projectConfig)
         else:
             log_message(f"Error: Image path {self.img_path} does not exist", "ERROR", module, self.log_enabled, self.projectConfig)
             
         # Get all label files from the directory
         if os.path.exists(self.label_path):
             self.labels = [f for f in os.listdir(self.label_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-            log_message(f"First few labels: {self.labels[:5] if self.labels else 'None'}", "INFO", module, self.log_enabled, self.projectConfig)
+            # log_message(f"First few labels: {self.labels[:5] if self.labels else 'None'}", "INFO", module, self.log_enabled, self.projectConfig)
         else:
             log_message(f"Error: Label path {self.label_path} does not exist", "ERROR", module, self.log_enabled, self.projectConfig)
             
@@ -103,6 +110,15 @@ class Dataset_JPG_Patch(Dataset_Base):
                 if img_base in label_base and "_Segmentation" in label_base:
                     self.image_to_label_map[img] = label
                     break
+
+        # If using percentage, limit the dataset size
+        if self.use_percentage < 1.0:
+            total_pairs = len(self.image_to_label_map)
+            limit = int(total_pairs * self.use_percentage)
+            if limit < 1:
+                limit = 1
+            self.image_to_label_map = dict(list(self.image_to_label_map.items())[:limit])
+            log_message(f"Using {self.use_percentage*100}% of dataset, limited to {limit} pairs", "INFO", module, self.log_enabled, self.projectConfig)
         
         # Set length to number of valid image-label pairs
         self.length = len(self.image_to_label_map)
@@ -132,9 +148,9 @@ class Dataset_JPG_Patch(Dataset_Base):
             
             # Print the paths for debugging if first item
             module = f"{__name__}:__getitem__" if self.log_enabled else ""
-            if idx == 0:
-                log_message(f"Loading image from: {img_path}", "STATUS", module, self.log_enabled, self.projectConfig)
-                log_message(f"Loading label from: {label_path}", "STATUS", module, self.log_enabled, self.projectConfig)
+            # if idx == 0:
+            #     log_message(f"Loading image from: {img_path}", "STATUS", module, self.log_enabled, self.projectConfig)
+            #     log_message(f"Loading label from: {label_path}", "STATUS", module, self.log_enabled, self.projectConfig)
             
             # Open images - keep color version and create grayscale version
             image_color = Image.open(img_path).convert('RGB')  # Open as color
@@ -148,8 +164,8 @@ class Dataset_JPG_Patch(Dataset_Base):
                     image = image.resize(self.input_size, Image.BILINEAR)
                     label = label.resize(self.input_size, Image.NEAREST)
                     
-                    if idx == 0:
-                        log_message(f"Resized image to {self.input_size}", "SUCCESS", module, self.log_enabled, self.projectConfig)
+                    # if idx == 0:
+                    #     log_message(f"Resized image to {self.input_size}", "SUCCESS", module, self.log_enabled, self.projectConfig)
                 else:
                     log_message(f"Warning: Invalid input size: {self.input_size}, using original sizes", "WARNING", module, self.log_enabled, self.projectConfig)
             
@@ -159,8 +175,8 @@ class Dataset_JPG_Patch(Dataset_Base):
             img_tensor = self.transform(image)
             label_tensor = self.transform(label)
             
-            if idx == 0:
-                log_message(f"Final tensor shapes - Color Image: {img_color_tensor.shape}, Grayscale Image: {img_tensor.shape}, Label: {label_tensor.shape}", "SUCCESS", module, self.log_enabled, self.projectConfig)
+            # if idx == 0:
+            #     log_message(f"Final tensor shapes - Color Image: {img_color_tensor.shape}, Grayscale Image: {img_tensor.shape}, Label: {label_tensor.shape}", "SUCCESS", module, self.log_enabled, self.projectConfig)
             
             # Return color image, grayscale image, and label
             return img_file[:-4], img_color_tensor, img_tensor, label_tensor

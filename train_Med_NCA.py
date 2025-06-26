@@ -3,7 +3,7 @@ from src.datasets.Dataset_JPG_idk import Dataset_JPG
 from src.models.Model_BackboneNCA import BackboneNCA
 from src.losses.LossFunctions import DiceBCELoss
 from src.utils.Experiment import Experiment
-from src.agents.Agent_Med_NCA import Agent_Med_NCA
+from src.agents.DONOTUSE_Agent_Med_NCA import Agent_Med_NCA
 import os
 
 config = [{

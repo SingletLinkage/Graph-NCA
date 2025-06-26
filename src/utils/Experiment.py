@@ -12,7 +12,7 @@ class Experiment():
             - Loading / Saving experiments
             - Datasets
     """
-    def __init__(self, config, dataset, model, agent, log_enabled=True):
+    def __init__(self, config, dataset, model, agent, log_enabled=True, test_dataset=None):
         self.projectConfig = config
         self.log_enabled = log_enabled
         
@@ -28,6 +28,8 @@ class Experiment():
         self.dataset = dataset
         self.model = model
         self.agent = agent
+        self.test_dataset = test_dataset
+        
         self.general()
         if(os.path.isdir(os.path.join(self.config['model_path'], 'models'))):
             self.reload()
@@ -65,7 +67,7 @@ class Experiment():
         """
         # Create dirs
         os.makedirs(self.config['model_path'], exist_ok=True)
-        os.makedirs(os.path.join(self.config['model_path'], 'models'), exist_ok=True)
+        os.makedirs(os.path.join(self.config['model_path'], 'checkpoints'), exist_ok=True)
         os.makedirs(os.path.join(self.get_from_config('model_path'), 'tensorboard', os.path.basename(self.get_from_config('model_path'))), exist_ok=True)
         
         module = f"{__name__}:setup" if self.log_enabled else ""
@@ -74,7 +76,7 @@ class Experiment():
         # Create basic configuration
         self.data_split = self.new_datasplit()
         dump_pickle_file(self.data_split, os.path.join(self.config['model_path'], 'data_split.dt'))
-        dump_json_file(self.projectConfig, os.path.join(self.config['model_path'], 'config.dt'))
+        dump_json_file(self.projectConfig, os.path.join(self.config['model_path'], 'config.json'))
         log_message("Saved data split and config files", "SUCCESS", module, self.log_enabled, self.projectConfig)
 
     def new_datasplit(self):

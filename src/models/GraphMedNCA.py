@@ -73,7 +73,7 @@ def image_to_graph(feature_map, k=8, log_enabled=False):
     return graphs
 
 class GraphMedNCA(nn.Module):
-    def __init__(self, hidden_channels=16, n_channels=1, fire_rate=0.5, slice_dim=None, device=None, log_enabled=True):
+    def __init__(self, size=64, hidden_channels=16, n_channels=1, fire_rate=0.5, slice_dim=None, device=None, log_enabled=True):
         super(GraphMedNCA, self).__init__()
         
         self.hidden_channels = hidden_channels
@@ -84,10 +84,10 @@ class GraphMedNCA(nn.Module):
         
         # Graph-based perception module
         self.encoder = nn.Sequential(
-            nn.Conv2d(n_channels, 64, 3, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(n_channels, size, 3, padding=1),
+            nn.BatchNorm2d(size),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, hidden_channels, 3, padding=1),
+            nn.Conv2d(size, hidden_channels, 3, padding=1),
             nn.BatchNorm2d(hidden_channels),
             nn.ReLU(inplace=True)
         )
@@ -152,7 +152,7 @@ class GraphMedNCA(nn.Module):
             module = f"{__name__}:forward" if self.log_enabled else ""
             
             # Initial encoding
-            h = self.encoder(x)
+            h = self.encoder(x)# TODO: Can be removed 
             
             # Store graph visualization data if requested
             graph_edge_index = None

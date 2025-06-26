@@ -87,7 +87,7 @@ def main(model_path, log_enabled=True):
         
         # Initialize the model and dataset
         log_message("Setting up dataset for inference...", "INFO", module, log_enabled, config)
-        dataset = Dataset_JPG_Patch(resize=True, log_enabled=log_enabled, config=config)
+        dataset = Dataset_JPG_Patch(resize=True, log_enabled=log_enabled, config=config, _test=True)
         
         # Define device
         device = torch.device(config[0].get('device', 'cuda' if torch.cuda.is_available() else 'cpu'))
@@ -122,12 +122,12 @@ def main(model_path, log_enabled=True):
         log_message("Agent initialized successfully!", "SUCCESS", module, log_enabled, config)
         
         # Initialize experiment
-        exp = Experiment(config, dataset, model, agent, log_enabled=log_enabled)
+        exp = Experiment(config, dataset, model, agent, log_enabled=log_enabled, test_dataset=dataset)
         log_message("Experiment initialized successfully!", "SUCCESS", module, log_enabled, config)
         
         # Set model to evaluation mode
         exp.set_model_state('test')  # Use 'test' mode instead of 'train'
-        dataset.set_experiment(exp)
+        dataset.set_experiment(exp, isTest=True)  # Set dataset to test mode
         
         # Now we can check the dataset info
         log_message(f"Dataset size: {len(dataset)}", "INFO", module, log_enabled, config)
@@ -147,11 +147,11 @@ def main(model_path, log_enabled=True):
             print("\n=== RUNNING INFERENCE ===\n")
             
         # Run inference with image saving
-        dice_score = agent.getAverageDiceScore_withimsave(output_dir=inference_dir)
+        dice_score = agent.getAverageDiceScore_withimsave(output_dir=inference_dir, saveGraphs=False)
         
         # Print summary
         log_message(f"Inference complete! Average Dice Score: {dice_score:.4f}", "SUCCESS", module, log_enabled, config)
-        log_message(f"Results saved to: {os.path.join(model_path, 'outputs')}", "INFO", module, log_enabled, config)
+        log_message(f"Results saved to: {inference_dir}", "INFO", module, log_enabled, config)
         
     except Exception as e:
         log_message(f"Error in inference execution: {str(e)}", "ERROR", module, log_enabled, config if 'config' in locals() else None)
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     # Set up command line argument parsing
     parser = argparse.ArgumentParser(description='Run inference for Graph-based MedNCA model')
     parser.add_argument('--model-path', type=str, 
-                        default='/home/teaching/group21/final/test-mednca-temp/runs/model_10',
+                        default='/home/teaching/group21/final/test-mednca-temp/runs/model_28',
                         help='Path to the model directory')
     parser.add_argument('--log', action='store_true', help='Enable verbose logging with colors')
     parser.add_argument('--no-log', dest='log', action='store_false', help='Disable verbose logging')
